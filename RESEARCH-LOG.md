@@ -126,3 +126,88 @@ inspection snippet (feature-name mapping, size/missingness correlation). Verifie
 myself by reading the printed output rather than trusting a paraphrase.
 
 ---
+
+## 2026-09-19 — Building the agent (tools, LLM client, graph, monitoring, UI)
+
+Built in the order from the approved plan: `agent/tools.py` (deterministic scoring/gate/tier/
+reason-code functions) → `agent/llm/client.py` (Mock/Groq drafter) → `monitoring/checks.py` →
+`agent/graph.py` + `agent/run.py` (LangGraph wiring) → `agent/ui/app.py` (Streamlit). Each step
+was smoke-tested against the real CSVs and model before committing, not just eyeballed.
+
+**Where Claude Code got something concretely wrong, and what I changed:** the first version
+of `draft_outreach` in `graph.py` capped Hot-tier drafts at `HOT_DRAFT_CAP` (20) by slicing
+`tiers[tiers == "Hot"].index[:20]` — that takes the first 20 Hot accounts in whatever order
+they happen to sit in the source CSV, not the top 20 by predicted probability. It ran without
+error and produced a plausible-looking output, which is exactly the kind of silently-wrong
+result that's easy to miss if you don't check output content against intent. Caught it by
+actually reading the generated `worklist.csv` and asking "are these really the top 20," not
+just "did it run." Fixed by sorting on `probability` (descending) before slicing:
+`probability[tiers == "Hot"].sort_values(ascending=False).index[:HOT_DRAFT_CAP]`. Re-ran and
+confirmed the drafted accounts are now the actual highest-probability Hot accounts.
+
+**Other AI-assisted decisions in this pass, used mostly as generated:**
+- Percentile-based tiering (`assign_tiers`) instead of absolute probability cutoffs — this
+  followed directly from the score-distribution finding above (max ~27%, so any fixed
+  threshold like ">50%" would select nobody), not a generic AI suggestion; verified by running
+  it and checking the resulting tier counts (30/90/180) look sane before committing.
+- The reason-code weighting (`importance x relative distance from median`) is a simple,
+  explainable heuristic, not SHAP or anything rigorous — chose it deliberately over a
+  "proper" explainability library given the brief's explicit statement that
+  research-grade rigor isn't the bar here, and because it stays fast, dependency-free, and
+  reliable even if the LLM step is down.
+- PSI thresholds (0.10/0.20) for the drift check are the standard industry convention, not
+  something invented for this exercise — used as-is, then verified they actually discriminate
+  by testing against both the real (stable) data and a synthetic shifted distribution.
+
+**AI tool used:** Claude Code (Sonnet 5), same interactive session, iterative build-test-commit
+cycle for each file.
+
+---
+
+## 2026-09-19 — Consolidated raw material (to defend live)
+
+Pulling together everything from above into one place — the numbers, hypotheses, and
+assumptions I'd actually stand behind in the room, not a polished narrative.
+
+**Model.** `sklearn.Pipeline`: OneHotEncoder(`account_type`, `industry`) + median-`SimpleImputer`
+on 7 numeric columns → `GradientBoostingClassifier` (40 trees, depth 2, lr 0.05). Feature
+importances (mapped to real names via `get_feature_names_out()`, not raw index order):
+`intent_score` 0.271, `web_touchpoints_90d` 0.214, `sales_contacts_90d` 0.209,
+`employee_count` 0.111, `trial_started` 0.062, `trial_active_users` 0.048,
+`mql_count_90d` 0.044. `account_type`/`industry` contribute almost nothing (<0.02 each) —
+if asked "does the model just re-derive account_type," the answer is no, it barely uses it.
+
+**Base rates.** Training data (1,200 rows): 6.5% overall conversion, roughly flat across
+account_type (6.0-7.2%). This is *higher* than the brief's stated real-world rates
+(well under 1% cold, low single digits engaged) — training_data.csv is not a representative
+random sample of the full untouched-account universe; treat it as a curated/labeled subset.
+**Assumption I'm making explicit:** the *relative* lift the model provides should generalize
+better than the *absolute* rates do.
+
+**Lift number (the one to lead with).** Top predicted-probability decile converts at 26.7%
+vs. 6.5% overall = **~4.1x lift**, computed in-sample on the 1,200-row training set (not a
+held-out test — I'm calling that out proactively, not waiting to be asked). Bottom decile
+converts at 1.7%, not zero — the honest "cost of being wrong" number: deprioritized accounts
+still convert sometimes.
+
+**Today's batch** (`data/accounts_to_score.csv`, 300 accounts, scored as of 2026-08-01):
+30 Hot / 90 Warm / 180 Cold by percentile tiers (tiers must be percentile-based — predicted
+probabilities top out around 20-27%, so any fixed cutoff like ">50%" selects zero accounts).
+264 accounts route to the SDR track (Prospect/Suspect), 36 to the AM win-back track (Former
+Customer). 0 rows hard-fail the data-quality gate; 38.7% have missing `intent_score`
+(model-imputed, consistent with the ~40% baseline); 14% have snapshot data over a year old.
+PSI between training and this batch's score distributions is ~0.006 — stable, no drift today.
+
+**Hypotheses I did NOT get to validate and would say so if asked:** whether the ~40%
+intent_score missingness in this synthetic data actually skews by company size the way the
+brief describes real intent-vendor coverage doing (I checked — in this dataset it doesn't,
+correlation ~0.04) — worth noting as a difference between this synthetic data and the
+real-world data-sourcing story described in the brief, not a contradiction of it.
+
+**What I'd change with more time:** wire `check_business_outcome_proxy` against real outcomes
+once they exist; add a small backtest harness that replays historical batches through the
+tiering logic to sanity-check the 4.1x number against something closer to held-out validation;
+consider whether `employee_count`'s influence (0.111) should be capped so the model doesn't
+implicitly under-prioritize genuinely promising small accounts.
+
+---
