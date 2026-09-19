@@ -92,7 +92,7 @@ switches it to a real Groq call automatically; nothing else in the codebase chan
 - `monitoring/latest_report.json` — output of the committed sample run.
 - `DOMAIN-DICTIONARY.md` — reference for every column and term used in this system.
 - `PROPOSAL.md` — impact framing, agent design, and monitoring design.
-- `PROPOSAL.html` — the same substance, illustrated for a non-technical audience.
+- `PROPOSAL.html` — the same substance, illustrated with charts for a business audience.
 - `RESEARCH-LOG.md` — the build's working log, kept live throughout.
 - `scripts/explore_data.py`, `scripts/make_charts.py` — one-off data exploration and chart
   generation, not part of the running agent.
