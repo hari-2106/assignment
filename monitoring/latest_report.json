@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-09-19T11:31:29.363754+00:00",
+  "input_quality": {
+    "status": "pass",
+    "issues": [],
+    "metrics": {
+      "row_count": 300,
+      "intent_null_rate": 0.38666666666666666,
+      "intent_null_rate_baseline": 0.4,
+      "intent_null_rate_within_tolerance": true,
+      "hard_missing_rate": 0.0,
+      "stale_rate": 0.14,
+      "bad_date_rate": 0.0
+    }
+  },
+  "score_drift": {
+    "status": "pass",
+    "psi": 0.00612135227374999,
+    "reference_n": 1200,
+    "new_n": 300
+  },
+  "tier_sanity": {
+    "status": "pass",
+    "hot_share": 0.1,
+    "expected_hot_share": 0.1
+  },
+  "business_outcome_proxy": {
+    "status": "not_runnable",
+    "reason": "No ground-truth outcomes exist yet for this batch (conversion is a 90-day window; this batch was scored on 2026-08-01). See this function's docstring for the exact inputs and logic once outcomes are available."
+  }
+}
