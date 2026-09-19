@@ -4,11 +4,9 @@
 
 **Who decides, and what changes.** Two people act on this model's output, split by
 `account_type`: an **SDR** working cold outbound into `Prospect`/`Suspect` accounts, and an
-**Account Manager** working win-back on `Former Customer` accounts. Today both are picking
-which of thousands of untouched accounts to call this week with no ranking at all — first in
-the list, most recently added, or whoever's top-of-mind. The model doesn't change *whether*
-reps call accounts; it changes *which ones they call first*, and gives them a reason to open
-the conversation with.
+**Account Manager** working win-back on `Former Customer` accounts. Today both pick which of
+thousands of untouched accounts to call this week with no ranking at all. The model doesn't
+change *whether* reps call accounts; it changes *which ones they call first*, with a reason.
 
 **What it's actually worth, grounded in the data.** I scored the 1,200-account training set
 with the model and bucketed by predicted-probability decile, then looked at *actual*
@@ -21,30 +19,24 @@ lift estimate, not a rigorous one, and I'm flagging that explicitly rather than 
 | Top 10% (Hot tier) | 13.9% | **26.7%** |
 | Overall / no ranking | — | 6.5% |
 
-The top decile converts at **~4.1x** the base rate, and the bottom decile at roughly a
-quarter of it. Applied to today's 300-account batch (30 Hot / 90 Warm / 180 Cold by the
-agent's percentile tiers): if an SDR has bandwidth for, say, 30 calls this week, working the
-Hot tier first should surface meaningfully more real conversions than working 30 accounts in
-whatever order they're sitting in Salesforce today — for the same number of calls, not more
-of them. That's the pitch to a VP of Sales: this doesn't ask for more headcount or more
-activity, it makes the activity already happening land on better targets.
+The top decile converts at **~4.1x** the base rate, the bottom decile at roughly a quarter of
+it. Applied to today's batch (30 Hot / 90 Warm / 180 Cold): if an SDR has bandwidth for 30
+calls this week, working the Hot tier first should surface meaningfully more real conversions
+than working 30 accounts in whatever order they're sitting in Salesforce today — same number
+of calls, not more of them. That's the pitch: no extra headcount, better-targeted activity.
 
-**Where I'm not going to overclaim.** Training data's blended base rate is 6.5% — notably
+**Where I'm not going to overclaim.** Training data's blended base rate (6.5%) is notably
 higher than the brief's own description of real-world cold-outreach conversion ("well under
-1% for cold accounts, low single digits for anything with recent engagement"). That gap tells
-me `training_data.csv` is not a random sample of Cordilla's full untouched-account universe;
-it's likely a curated slice (accounts that had outcomes labeled or got worked historically).
-So the *relative* lift (~4x) is the number I'd defend in the room — the *absolute* 26.7%
-number should not be presented as "this is what Hot-tier accounts convert at in production."
+1% for cold accounts, low single digits for engaged ones"). That gap says `training_data.csv`
+isn't a random sample of the full untouched-account universe — likely a curated slice. So the
+*relative* lift (~4x) is what I'd defend in the room, not the absolute 26.7% figure.
 
-**The cost of being wrong, in both directions.** A false positive (a Hot-tier account that
-doesn't convert) costs one wasted call — cheap, self-correcting, reps notice quickly. A false
-negative is quieter and more expensive: the bottom decile still converts at 1.7%, not zero.
-Across the 180 Cold-tier accounts in today's batch, that implies a handful of real
-conversions this ranking is deliberately deprioritizing. That's a real trade-off to say out
-loud to a VP of Sales, not bury — the model doesn't eliminate that cost, it concentrates rep
-effort where it pays off most on average, at the price of some accounts that would have
-converted getting less attention.
+**The cost of being wrong, in both directions.** A false positive (a Hot account that doesn't
+convert) costs one wasted call — cheap, self-correcting. A false negative is quieter and more
+expensive: the bottom decile still converts at 1.7%, not zero, so across 180 Cold-tier
+accounts this ranking deliberately deprioritizes a handful of real conversions. Worth saying
+out loud to a VP, not burying — the model concentrates effort where it pays off on average, at
+the price of some accounts that would have converted getting less attention.
 
 ## Agent design
 
@@ -59,20 +51,19 @@ than silently producing a confident-looking worklist from garbage — the exact 
 the brief calls out), and the second only invokes the one LLM step when there's a Hot-tier
 account to draft for.
 
-**Tools, and why each one exists.** `score_model_tool` wraps `.predict_proba` and nothing
-else. `data_quality_tool` flags missing required fields, unparseable dates, and stale
-snapshots (data up to 675 days old exists in this batch) without hiding flagged accounts —
-they're still scored and shown, just marked `needs_review`. `reason_code_tool` is
-deterministic: it ranks each account's top signals by (feature importance × distance from the
-population median), using the model's real `feature_importances_` mapped to actual column
-names (`intent_score` 0.271, `web_touchpoints_90d` 0.214, `sales_contacts_90d` 0.209 dominate;
-`account_type`/`industry` contribute almost nothing). The one non-deterministic tool is
-`draft_outreach`, isolated behind an `OutreachDrafter` interface specifically so a bad or slow
-LLM call can never corrupt scoring, gating, or ranking — only the drafted blurb for capped
-top-20 Hot accounts is affected. Its default backend is a documented mock (prompt, inputs,
-model, and expected output shape specified in the docstring); if `GROQ_API_KEY` is set, the
-same interface calls Groq's chat completion API for real instead — zero code changes needed
-either way, and zero risk if it's absent during a live demo.
+**Tools, and why each one exists.** `score_model_tool` wraps `.predict_proba`, nothing else.
+`data_quality_tool` flags missing fields, unparseable dates, and stale snapshots (up to 675
+days old in this batch) without hiding flagged accounts — still scored and shown, just marked
+`needs_review`, and excluded from auto-drafted outreach (a real gap caught mid-build: two
+Hot-tier accounts were getting confident drafts off 400+-day-old data before this fix).
+`reason_code_tool` is deterministic: it ranks each account's top signals by (feature
+importance × distance from the population median), using the model's real
+`feature_importances_` mapped to real column names (`intent_score` 0.271,
+`web_touchpoints_90d` 0.214, `sales_contacts_90d` 0.209 dominate; `account_type`/`industry`
+contribute almost nothing). The one non-deterministic tool is `draft_outreach`, isolated
+behind an `OutreachDrafter` interface so a bad LLM call can never corrupt scoring or ranking.
+Default backend is a documented mock; if `GROQ_API_KEY` is set, the same interface calls
+Groq's API for real instead — zero code changes either way, zero risk if absent during a demo.
 
 **Interface: Streamlit, not a chatbot.** The actual decision — "which accounts, in what
 order, why" — is a ranked table, not a conversation. `agent/ui/app.py` gives reps a filterable
@@ -81,16 +72,14 @@ button) and a Monitoring tab surfacing the same health checks described below, s
 using the output can also see whether it's currently trustworthy.
 
 **Deployment (sketch, not built).** As a real service this would run on a daily/weekly
-schedule (new accounts enter the funnel continuously), triggered by an orchestrator (Airflow/
-a scheduled job) pulling fresh Salesforce data, writing the worklist back into Salesforce as a
-custom field or list view SDRs already use, and pushing the monitoring report to wherever the
-team already watches alerts (Slack/PagerDuty), not a dashboard nobody opens.
+schedule via a scheduled job pulling fresh Salesforce data, write the worklist back as a
+Salesforce list view SDRs already use (not a second dashboard), and push the monitoring report
+to wherever the team already watches alerts (Slack/PagerDuty).
 
 ## Monitoring design
 
-The brief's own cautionary tale is the design target: a model that keeps running, produces
-output that looks fine, and quietly stops matching reality. Four checks, in
-`monitoring/checks.py`:
+The brief's own cautionary tale is the design target: a model that keeps running, looks fine,
+and quietly stops matching reality. Five checks, in `monitoring/checks.py`:
 
 1. **Input quality** — wraps the data-quality gate's dataset metrics: `intent_score` null
    rate compared against the ~40% baseline with tolerance (catches vendor coverage changes),
@@ -105,10 +94,25 @@ output that looks fine, and quietly stops matching reality. Four checks, in
 4. **Business-outcome proxy** — precisely specified but honestly marked `not_runnable` today:
    comparing flagged accounts' real 90-day outcomes against predicted probability by decile is
    the *one* check that would have caught Cordilla's earlier drift, but this batch has no
-   ground truth yet (scored 2026-08-01, outcomes land 90 days later). The function signature
-   and exact logic are in the code now, ready to activate the first time real outcomes exist.
+   ground truth yet (scored 2026-08-01, outcomes land 90 days later). The logic is in the code
+   now, ready to activate the first time real outcomes exist.
+5. **LLM output groundedness** (via Inspect AI) — verifies every number the drafting step
+   states about an account actually exists in that account's real data. The mock backend
+   always passes by construction; this starts mattering the moment a real generative model is
+   active and could invent or round a number. Verified it fires, not just passes, by feeding
+   it a fabricated draft and watching the score drop.
 
 What tripping looks like in practice: PSI creeping from 0.02 to 0.15 over a few weeks with no
 crash and no error — reps still get a worklist every Monday, it just quietly stops reflecting
 what's actually converting. That's the alert that should page someone, not a dashboard nobody
 checks until a VP asks why pipeline coverage looks off two quarters later.
+
+## What's missing, and what it would unlock
+
+Two gaps limit this beyond a prototype. There's no contact-level data — these CSVs describe
+accounts, not people, so a rep still can't act without a name/email joined in from Salesforce.
+Once that exists, an LLM-with-tools research step (news, funding, leadership changes) could
+turn "high intent score" into an actual conversation opener. Second, there's no invoice/
+line-item data, so real RFM segmentation for Former Customer win-back isn't possible with what
+we have (see `DOMAIN-DICTIONARY.md` section 5) — with it, tiering could weight by deal size,
+not just conversion odds. Expanded visual version with charts and more ideas: `PROPOSAL.html`.

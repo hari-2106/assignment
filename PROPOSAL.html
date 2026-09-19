@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cordilla Account Scoring — Proposal</title>
+<style>
+  :root {
+    --ink: #1d1d1f;
+    --muted: #5f6368;
+    --bg: #ffffff;
+    --card: #f7f7f9;
+    --line: #e5e5e8;
+    --accent: #264653;
+    --hot: #d62828;
+    --warm: #f77f00;
+    --cold: #8d99ae;
+    --good: #2a9d8f;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    margin: 0;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 920px; margin: 0 auto; padding: 40px 20px 80px; }
+  header.hero { padding: 20px 0 30px; border-bottom: 1px solid var(--line); margin-bottom: 30px; }
+  header.hero h1 { font-size: 2rem; margin: 0 0 8px; }
+  header.hero p { color: var(--muted); font-size: 1.1rem; margin: 0; }
+  h2 { font-size: 1.4rem; margin: 40px 0 14px; border-left: 4px solid var(--accent); padding-left: 12px; }
+  h3 { font-size: 1.1rem; margin: 22px 0 8px; }
+  p { margin: 0 0 12px; }
+  .kicker { text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+  .stat-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 18px 0; }
+  .stat-card { flex: 1 1 180px; background: var(--card); border-radius: 10px; padding: 16px 18px; border: 1px solid var(--line); }
+  .stat-card .num { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
+  .stat-card .label { font-size: 0.85rem; color: var(--muted); }
+  .chart { width: 100%; max-width: 700px; display: block; margin: 18px auto; border-radius: 8px; border: 1px solid var(--line); }
+  .callout { background: #fff8e6; border: 1px solid #f0d98c; border-radius: 8px; padding: 14px 16px; margin: 16px 0; }
+  .callout.warn { background: #fdecea; border-color: #f3b4ac; }
+  .callout.good { background: #e9f7f4; border-color: #b7e4da; }
+  .two-col { display: flex; gap: 20px; flex-wrap: wrap; margin: 16px 0; }
+  .card { flex: 1 1 320px; border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; background: var(--card); }
+  .card h4 { margin: 0 0 8px; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .card.before { border-left: 4px solid var(--cold); }
+  .card.after { border-left: 4px solid var(--good); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
+  .badge.hot { background: var(--hot); color: white; }
+  .badge.warn { background: #f3b4ac; color: #5c1a12; }
+  .pipeline { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 16px 0; font-size: 0.85rem; }
+  .step { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
+  .step.gate { border-color: var(--hot); }
+  .arrow { color: var(--muted); }
+  ul.checks li { margin-bottom: 8px; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 0.92rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  .idea-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; margin: 16px 0; }
+  .idea { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .idea .tag { font-size: 0.7rem; text-transform: uppercase; color: var(--good); font-weight: 700; letter-spacing: 0.05em; }
+  footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
+  code { background: #eee; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink: #f2f2f3; --muted: #a3a3a8; --bg: #121214; --card: #1c1c1f; --line: #313136;
+    }
+    body { background: var(--bg); }
+    .chart { filter: brightness(0.95); background: white; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="kicker">Cordilla Systems &middot; Account Scoring</div>
+  <h1>Turning a dormant model into a rep's actual worklist</h1>
+  <p>The plain-language version of <code>PROPOSAL.md</code> — same substance, built for a
+  VP-of-Sales-level walkthrough, not an engineering review.</p>
+</header>
+
+<h2>The situation in one line</h2>
+<p>Cordilla has a working prediction model sitting unused, and thousands of accounts nobody
+is calling in any particular order. This agent turns "there's a model" into a short, ranked,
+reasoned list an SDR or Account Manager can act on today.</p>
+
+<div class="stat-row">
+  <div class="stat-card"><div class="num">300</div><div class="label">accounts scored this run</div></div>
+  <div class="stat-card"><div class="num">30</div><div class="label">flagged Hot priority</div></div>
+  <div class="stat-card"><div class="num">~4.1x</div><div class="label">conversion lift, top decile vs. average</div></div>
+  <div class="stat-card"><div class="num">42</div><div class="label">accounts held back for data-quality review</div></div>
+</div>
+
+<h2>What the numbers actually say</h2>
+<p>I scored the 1,200 historical accounts with the model and checked what <em>actually</em>
+happened for accounts the model rated highest vs. everyone else:</p>
+<img class="chart" src="agent/output/charts/lift.png" alt="Bar chart showing conversion rate by predicted-probability decile, with the top decile at 26.7% versus an overall average of 6.5%">
+<p>Accounts in the top 10% by predicted score converted at <strong>26.7%</strong>, against a
+<strong>6.5%</strong> average — a real, computed <strong>~4.1x lift</strong>, not an assumed
+number. The honest caveats: this is measured on the same historical data the model was
+trained on (not a fresh held-out test), and that 6.5% baseline is itself higher than what the
+brief describes as real-world cold-outreach rates — so treat the <em>relative</em> lift as the
+defensible claim, not the exact 26.7% figure in production.</p>
+
+<div class="callout">
+  <strong>The trade-off worth saying out loud:</strong> the bottom 10% of accounts still
+  convert at 1.7% — not zero. Prioritizing Hot accounts means a handful of real deals in the
+  Cold tier get less attention. That's the actual cost of ranking, not a flaw to hide.
+</div>
+
+<h2>What happens to the 300 accounts</h2>
+<img class="chart" src="agent/output/charts/funnel.png" alt="Funnel chart: 300 accounts scored, 258 confidently scored, 30 Hot tier, 20 with draft outreach ready">
+<p>Every account gets scored and shown — nothing is hidden. 42 accounts (14%) have snapshot
+data over a year old, so the agent holds those back from automatic action (a person should
+double-check before calling) rather than confidently acting on stale information.</p>
+
+<img class="chart" src="agent/output/charts/tier_by_track.png" alt="Stacked bar chart of tier counts by track (SDR outbound vs AM win-back)">
+<p>Accounts split into two tracks based on relationship: <strong>SDR_Outbound</strong>
+(Prospects/Suspects — cold outreach) and <strong>AM_WinBack</strong> (Former Customers). Each
+track gets its own tone of outreach even at the same score.</p>
+
+<h2>How the agent is built</h2>
+<div class="pipeline">
+  <div class="step">Load model + data</div><span class="arrow">&rarr;</span>
+  <div class="step gate">Quality gate</div><span class="arrow">&rarr;</span>
+  <div class="step">Score</div><span class="arrow">&rarr;</span>
+  <div class="step">Tier + route</div><span class="arrow">&rarr;</span>
+  <div class="step">Explain (reason codes)</div><span class="arrow">&rarr;</span>
+  <div class="step gate">Draft outreach*</div><span class="arrow">&rarr;</span>
+  <div class="step">Worklist + monitoring</div>
+</div>
+<p style="font-size:0.85rem;color:var(--muted)">*Only for Hot-tier accounts that are <em>not</em> flagged for review — see the example below.</p>
+<p>Built as a <strong>LangGraph</strong> pipeline rather than a multi-agent framework like
+CrewAI — this is fundamentally one pipeline with a couple of real decision points, not a
+negotiation between autonomous agents. The two red boxes above are genuine branch points: the
+quality gate can halt the whole run if input data has collapsed, and the draft step is
+skipped entirely for accounts the agent doesn't trust yet.</p>
+
+<h2>A concrete before / after</h2>
+<p>This is the clearest illustration of what the agent adds beyond the raw model number.
+<code>ACC-00205</code> scores high enough to rank in the top 10% (Hot tier) — but its data is
+419 days old.</p>
+<div class="two-col">
+  <div class="card before">
+    <h4>Model alone</h4>
+    <p><strong>ACC-00205</strong><br>Predicted probability: <strong>12.9%</strong><br>
+    Ranks in the top 10% of this batch.</p>
+    <p style="color:var(--muted)">That's it — no context on <em>why</em>, no flag that the
+    underlying data predates most of the last year, and (if a naive pipeline auto-drafted off
+    every top-ranked account) a confident-sounding outreach message built on stale facts.</p>
+  </div>
+  <div class="card after">
+    <h4>Agent-enhanced</h4>
+    <p><strong>ACC-00205</strong> &nbsp;<span class="badge hot">Hot</span> <span class="badge warn">Needs review</span></p>
+    <p><strong>Why:</strong> larger company by headcount (243 vs. typical 61), strong buying
+    intent (63 vs. typical 29), above-average recent web activity.</p>
+    <p><strong>Flag:</strong> stale snapshot (419 days old) — <em>the agent does not
+    auto-generate outreach for this account</em> until someone confirms the data still holds.</p>
+  </div>
+</div>
+<p>Same model, same number. The difference is entirely what the agent adds on top: an
+explanation a rep can use, and a safety check that stops a stale record from turning into a
+confident-looking (and possibly wrong) message.</p>
+
+<h2>Monitoring: how we'd know if this goes quiet</h2>
+<p>The brief's own cautionary tale — a model that looked fine and quietly drifted for two
+quarters before anyone noticed — is the design target here. Five checks run on every batch:</p>
+<table>
+  <tr><th>Check</th><th>What it catches</th><th>Latest run</th></tr>
+  <tr><td>Input quality</td><td>Missing/stale/out-of-range data before it reaches the model</td><td>Pass</td></tr>
+  <tr><td>Score drift (PSI)</td><td>The model's output distribution silently shifting</td><td>Pass (PSI ≈ 0.006)</td></tr>
+  <tr><td>Tier sanity</td><td>Threshold or feature-pipeline breakage even if PSI looks fine</td><td>Pass</td></tr>
+  <tr><td>LLM output groundedness <em>(Inspect AI)</em></td><td>The drafting step inventing facts not in the account's real data</td><td>Pass</td></tr>
+  <tr><td>Business-outcome proxy</td><td>Predicted vs. actual conversion, by decile</td><td>Not runnable yet (no 90-day outcomes exist for this batch)</td></tr>
+</table>
+<div class="callout good">
+  <strong>New this pass:</strong> the groundedness check uses Inspect AI (UK AISI's LLM eval
+  framework) to verify every number a draft states actually exists in that account's real
+  data. The mock drafter always passes by construction — this check earns its keep the moment
+  a real generative model (Groq) is active and could invent or round a number. Verified it
+  actually fires by injecting a fabricated draft and watching it drop to a failing score.
+</div>
+
+<h2>What would make this meaningfully better</h2>
+<p>Two structural gaps limit what's possible with just these two CSVs, both worth naming
+directly rather than working around quietly:</p>
+<div class="idea-grid">
+  <div class="idea">
+    <div class="tag">Missing today</div>
+    <h4>No contact-level data</h4>
+    <p>These CSVs describe <em>accounts</em>, not people — no name, email, or phone. An agent
+    can rank a company all day, but a rep still can't act without a contact. Any real
+    deployment needs this joined in from Salesforce contacts/leads before "call this account"
+    becomes literally actionable.</p>
+  </div>
+  <div class="idea">
+    <div class="tag">Unlocked by contact data</div>
+    <h4>LLM-powered deep research per contact</h4>
+    <p>With a real name and company, an LLM-with-tools step could pull recent news, funding,
+    leadership changes, or LinkedIn activity before a call — turning "high intent score" into
+    an actual conversation hook. This is exactly the kind of LLM tool-use step this agent's
+    architecture already isolates safely (see the mock/Groq drafter design).</p>
+  </div>
+  <div class="idea">
+    <div class="tag">Missing today</div>
+    <h4>No invoice / product / line-item data</h4>
+    <p>Real RFM (Recency, Frequency, Monetary value) segmentation — especially valuable for
+    Former Customer win-back — needs purchase dates and amounts. Nothing here supports it; see
+    <code>DOMAIN-DICTIONARY.md</code> section 5 for exactly what's missing and why the current
+    columns can't substitute for it.</p>
+  </div>
+  <div class="idea">
+    <div class="tag">Unlocked by transaction data</div>
+    <h4>Deal-size-aware prioritization</h4>
+    <p>Right now every Hot account is treated as equally valuable. With line-item/ACV data,
+    tiering could weight by expected deal size, not just conversion probability — a account
+    with 15% conversion odds and a $50k ACV may outrank one with 20% odds and a $5k ACV.</p>
+  </div>
+</div>
+
+<h3>Other extensions worth considering</h3>
+<ul>
+  <li><strong>CRM write-back</strong> — push the worklist into Salesforce as Tasks/a list view reps already use, instead of a second dashboard to check.</li>
+  <li><strong>Capacity-aware cutoffs</strong> — size the Hot tier to what reps can actually work this week, not just a fixed 10%.</li>
+  <li><strong>Suppression rules</strong> — respect recent-contact and opt-out policy once that data is available, so the agent doesn't recommend re-contacting someone who just said no.</li>
+  <li><strong>Outcome feedback loop</strong> — once the business-outcome-proxy check has real data, use it to recalibrate tier thresholds over time, not just alert.</li>
+  <li><strong>SLA on Hot accounts</strong> — track how fast Hot-flagged accounts actually get worked; a Hot account sitting untouched for two weeks is going stale in exactly the way this agent flags for input data.</li>
+</ul>
+
+<footer>
+  Full technical proposal: <code>PROPOSAL.md</code> &middot; build history and AI-assisted
+  decisions: <code>RESEARCH-LOG.md</code> &middot; every term used here: <code>DOMAIN-DICTIONARY.md</code>
+</footer>
+
+</div>
+</body>
+</html>
