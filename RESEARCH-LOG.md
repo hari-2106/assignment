@@ -70,3 +70,59 @@ written. Full plan saved at
 `C:\Users\Prathamesh\.claude\plans\ancient-questing-elephant.md` for reference.
 
 ---
+
+## 2026-09-19 — Data exploration findings (`scripts/explore_data.py`)
+
+Ran the model and both CSVs through pandas to ground everything downstream in real numbers
+instead of assertions.
+
+**Model pipeline:** `ColumnTransformer` (OneHotEncoder on `account_type`+`industry`,
+median-`SimpleImputer` on the 7 numeric columns, i.e. missing `intent_score` gets imputed to the
+training median, not dropped) → `GradientBoostingClassifier` (40 estimators, depth 2, lr 0.05).
+Mapped `feature_importances_` to real column names via
+`model.named_steps['pre'].get_feature_names_out()` (don't trust raw index order — it's the
+one-hot-expanded order, not the original 9 columns). Ranked importances:
+`intent_score` 0.271, `web_touchpoints_90d` 0.214, `sales_contacts_90d` 0.209,
+`employee_count` 0.111, `trial_started` 0.062, `trial_active_users` 0.048,
+`mql_count_90d` 0.044 — `account_type`/`industry` dummies contribute almost nothing (<0.02
+each). This directly drives the reason-code tool: only these top ~4-5 numeric features are
+worth surfacing as "why."
+
+**Training data (1200 rows):** overall conversion rate 6.5%, fairly flat across
+`account_type` (Prospect 6.6%, Suspect 6.0%, Former Customer 7.2%) — account_type alone is a
+weak signal, consistent with its near-zero feature importance. Conversion is meaningfully higher
+where `intent_score` is present (8.2% vs 3.9% when missing), where `trial_started`=1 (9.9% vs
+5.7%), and where `sales_contacts_90d`>0 (7.7% vs 4.7% cold). Note the overall 6.5% base rate is
+noticeably higher than the brief's stated "well under 1% for cold accounts, low single digits
+for engaged" — this training set is evidently not a uniform random sample of the full untouched
+account universe (probably enriched toward accounts that got scored/labeled for some reason).
+**Important caveat for the impact framing:** don't extrapolate this 6.5% rate onto the full
+tens-of-thousands universe of untouched accounts without saying so explicitly.
+
+**intent_score missingness:** ~40% null in both training (40.2%) and scoring batch (38.7%),
+matching the brief. Checked whether missingness skews by company size (brief says real intent
+vendors skew toward larger accounts) — in this dataset it doesn't: missingness is ~38-43% flat
+across employee-count quartiles, and correlation between employee_count and intent_score is
+~0.04 (basically none). So this synthetic dataset's missingness looks closer to random than the
+real-world coverage-gap story the brief describes. Recorded as a caveat, not treated as
+contradicting the brief — monitoring the null rate itself is still the right check regardless of
+*why* it's missing.
+
+**Score distribution:** predicted probabilities are heavily compressed — median ~5.2%, 90th
+percentile ~10.9%, max ~27% (training) / ~21% (scoring batch). No account gets a high absolute
+probability. This rules out fixed absolute-probability tier thresholds (e.g. "Hot = P>50%" would
+select zero accounts) — tiers must be percentile-based against the observed distribution, e.g.
+top ~10% of a batch = Hot. Train vs. scoring-batch decile-by-decile comparison is nearly
+identical (means 0.0661 vs 0.0655) — no drift today, which gives a clean "stable" baseline for
+the PSI drift check once implemented.
+
+**snapshot_date staleness:** scoring batch snapshot ages (vs. 2026-08-01) range 0-675 days,
+median 121 days. Some accounts are scored on data nearly two years old — worth a
+staleness-based `needs_review` flag in the data-quality gate rather than treating all 300 rows
+as equally fresh.
+
+**AI tool used:** Claude Code, to write `scripts/explore_data.py` and the follow-up one-off
+inspection snippet (feature-name mapping, size/missingness correlation). Verified the numbers
+myself by reading the printed output rather than trusting a paraphrase.
+
+---
