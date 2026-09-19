@@ -274,3 +274,43 @@ against Inspect AI's actual documentation site for API details rather than guess
 training memory, given the library's fast-moving surface.
 
 ---
+
+## 2026-09-19 — Independent UX audit, verified before acting on it
+
+Gave a fresh AI session (a "coworker") the UX-review prompt drafted earlier, pointed at
+`agent/ui/app.py`, and got back a structured audit with severity ratings. Did not implement
+its findings blindly — checked each claim against the actual code and data first, since an
+audit session can hallucinate just as easily as any other LLM output, and this log is
+specifically about verifying what comes back, not just using it.
+
+**Confirmed real and fixed:** the Ask tab's caption literally printed
+`"Requires GROQ_API_KEY in a local .env file"` to any viewer — a genuine demo-fatal leak of an
+implementation detail, and the audit's single highest-value catch. Also real: `probability`
+shown as `0.2094` in the table vs. `20.9%` in the detail panel (inconsistent formatting); the
+"no draft" message not distinguishing needs_review from simply-outside-top-20; "Regenerate"
+labeling a button for an account that never had a draft; `str.title()` mangling
+`"llm_output_groundedness"` into `"Llm Output Groundedness"`; raw JSON as the only monitoring
+detail view; no top-of-tab pass/fail summary. All fixed — see the corresponding commit.
+
+**Checked and found inaccurate — did not blindly implement:**
+- The audit claimed `employee_count` renders blank in most rows. Checked directly:
+  `wl['employee_count'].isna().sum()` → `0` across all 300 rows. Not reproducible against the
+  actual data; treated as a rendering artifact in that session's own test environment, not a
+  real bug, and did not add a fix for something that doesn't exist.
+- The audit flagged "no company name column" as a UI bug. It's real that no human-readable
+  name displays, but there is no company-name field anywhere in either CSV — confirmed against
+  `DOMAIN-DICTIONARY.md`, which explicitly documents `account_id` as the only identifier. This
+  is a data-availability gap, not something fixable in the UI layer, and it's already called
+  out as a future-work gap in `PROPOSAL.html`. Added a caption clarifying this instead of
+  fabricating a display field or implying the fix is UI-side work.
+
+**Why this matters for the log specifically:** this is the clearest example in this repo of
+"verify what an AI tool gives you before acting on it" — roughly half of a plausible-sounding,
+well-formatted audit was accurate and worth fixing immediately, and two claims would have led
+to wasted effort (chasing a non-existent data bug) or a wrong fix (adding a fake company-name
+field to paper over a real data gap) if taken at face value.
+
+**AI tool used:** Claude Code (Sonnet 5) for the fixes; the audit itself was produced by a
+separate AI session using the UX-review prompt from the previous entry.
+
+---
