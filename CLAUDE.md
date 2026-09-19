@@ -41,6 +41,18 @@ the duration of this take-home exercise.
 - Flag data-quality issues only where they matter to impact framing or monitoring; don't
   chase every edge case.
 
+## Practical notes learned while building
+- Run the agent as `python -m agent.run` from the repo root, never `python agent/run.py` —
+  the latter breaks the `agent.*` package import because Python doesn't add the repo root to
+  `sys.path` when a script is run by relative path.
+- The model's predicted probabilities are heavily compressed (roughly 3.5%-27%, median ~5%).
+  Any future tiering/thresholding logic must use percentiles of the batch's own score
+  distribution, never a fixed absolute cutoff.
+- Prefer plain ASCII punctuation (`-` not em dash) in any string that might be printed to a
+  Windows terminal — em dashes render as replacement characters (`ï¿½`) in this environment's
+  default codepage. Not an issue in the Streamlit UI (browser renders UTF-8 fine), only in
+  console output/logs.
+
 ## Model bias / trust caveat (explicit ground rule)
 - We are aware the model may carry biases inherited from historical/partial data (e.g.,
   intent data skew toward larger accounts, missing values, low base rates). **We do not
