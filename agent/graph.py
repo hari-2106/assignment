@@ -104,14 +104,19 @@ def route_after_reason_codes(state: AgentState) -> str:
 
 
 def draft_outreach(state: AgentState) -> dict:
+    """Drafts outreach for the top Hot-tier accounts by probability — but never for an
+    account flagged needs_review. If the underlying data is too stale or incomplete to trust,
+    it's wrong to auto-generate a personalized message off it; that account should surface as
+    "verify before acting," not get a confident-sounding draft anyway.
+    """
     drafter = get_drafter()
     df = state["df"]
     tiers = state["tiers"]
     probability = state["probability"]
     rc = state["reason_codes"]
-    hot_idx = (
-        probability[tiers == "Hot"].sort_values(ascending=False).index[:HOT_DRAFT_CAP]
-    )
+    needs_review = state["dq_needs_review"]
+    eligible = probability[(tiers == "Hot") & ~needs_review]
+    hot_idx = eligible.sort_values(ascending=False).index[:HOT_DRAFT_CAP]
     drafts = {}
     for idx in hot_idx:
         account = df.loc[idx].to_dict()
