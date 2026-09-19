@@ -211,3 +211,66 @@ consider whether `employee_count`'s influence (0.111) should be capped so the mo
 implicitly under-prioritize genuinely promising small accounts.
 
 ---
+
+## 2026-09-19 — Post-run feedback pass: UX, domain grounding, second LLM tool, visuals
+
+After the first successful end-to-end run, the user reviewed the actual output and pushed back
+on specifics rather than accepting it as done — exactly the kind of correction this log is
+supposed to capture.
+
+**What the user flagged and what changed:**
+1. Reason codes and drafts read as too technical (raw column names, "vs median X" notation).
+   Rewrote `agent/tools.py::reason_codes` to use per-feature natural-language phrase
+   templates (`FEATURE_PHRASES`) instead of `"feat: val (above median med)"`, and rewrote
+   `MockOutreachDrafter` to weave those into full sentences with "This account..." as subject.
+2. `needs_review` was `False` for every row in the batch and the user didn't understand what
+   it meant. Investigated: the flag was only set for missing-hard-fields or bad dates, and
+   this batch has neither — but 14% of rows have snapshots over a year old, which was already
+   being *described* in `quality_flags` text but never actually flipping the boolean. That's
+   a real bug, not just a documentation gap: fixed `row_needs_review` to include `stale`.
+   Explained clearly in-code and to the user what the flag does and doesn't cover (deliberately
+   excludes missing `intent_score` — that's an expected, imputed coverage gap, not a red flag).
+3. Building the before/after comparison (see below) surfaced a second, more serious issue:
+   two Hot-tier accounts (`ACC-00205`, `ACC-00958`) were getting confident, personalized
+   auto-drafted outreach generated off 400+-day-old data — the `needs_review` flag existed but
+   `draft_outreach` didn't check it. Fixed: draft generation now excludes `needs_review`
+   accounts from the Hot-tier pool entirely, backfilling from the next-highest-probability
+   eligible accounts instead. This is the "corrected/overrode the AI" moment worth calling out
+   explicitly a second time in this log — the first pass (mine) treated `tier` and
+   `needs_review` as independent signals when they should gate each other.
+
+**New work built in this pass:**
+- Enriched `DOMAIN-DICTIONARY.md` (a candidate-authored reference the user pointed me at, not
+  something I generated) with a new section 11 mapping this repo's concrete implementation
+  choices (Tier, Track, needs_review, reason codes, PSI thresholds, the 4.1x number) back to
+  its general terminology — and surfaced a short glossary of the same terms directly in the
+  Streamlit sidebar so a first-time viewer isn't left guessing what "Hot tier" or "AM_WinBack"
+  means.
+- Built `agent/chatbot.py`: a real (not mocked) Groq call using the user's supplied code
+  pattern and model (`openai/gpt-oss-120b`, streaming). **Concrete correction here too:**
+  the first version loaded the *entire* `DOMAIN-DICTIONARY.md` (~10k tokens) into every system
+  prompt. First real call failed immediately with a 413 — this Groq org's TPM (tokens/minute)
+  limit is 8000, so the prompt alone exceeded the budget before any question or answer was
+  added. Replaced with a condensed, hand-curated excerpt (`CONDENSED_DICTIONARY`, a few hundred
+  tokens) and documented the honest limitation in-code: a production version would retrieve
+  only the relevant section per question instead of a fixed excerpt.
+- Added `monitoring/llm_eval.py`: an Inspect AI (UK AISI's LLM eval framework) task that scores
+  drafted outreach for numeric groundedness — does every number a draft states about an
+  account actually exist in that account's real data? Had to look up Inspect's actual current
+  API (Task/Sample/MemoryDataset/@solver/@scorer, `ModelOutput.from_content`) via its docs
+  rather than rely on training-data memory of the library, since it's actively evolving.
+  Verified this check isn't a rubber stamp by injecting a fabricated draft ("9999 employees...
+  500 purchases") and confirming it scores 0.0 and gets flagged, not just checking the real
+  (always-grounded-by-construction) mock drafts pass.
+- Added `scripts/make_charts.py` (matplotlib, offline, no JS/CDN) and `PROPOSAL.html`: a
+  plain-language, visual companion to `PROPOSAL.md` for a non-technical audience, built around
+  the same before/after example (`ACC-00205`) that surfaced the draft-outreach bug above, plus
+  a "what's missing" section (no contact-level data blocks real action; no invoice/line-item
+  data blocks real RFM) that came directly from the user's own framing, not something invented
+  independently.
+
+**AI tool used:** Claude Code (Sonnet 5), same session throughout. Used WebSearch/WebFetch
+against Inspect AI's actual documentation site for API details rather than guessing from
+training memory, given the library's fast-moving surface.
+
+---

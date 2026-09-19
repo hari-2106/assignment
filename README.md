@@ -8,8 +8,9 @@
 
 Tested against Python 3.11+ with the exact pinned versions above. If you'd rather work in a notebook than plain scripts (either is fine, see the take-home packet), `pip install -r requirements-notebook.txt` instead (adds Jupyter on top of the same pinned core).
 
-`requirements.txt` also pins `langgraph`, `streamlit`, and `requests` — added on top of the
-starter's original pins to build the agent (see `RESEARCH-LOG.md` for why).
+`requirements.txt` also pins `langgraph`, `streamlit`, `requests`, `groq`, `python-dotenv`, and
+`inspect_ai` — added on top of the starter's original pins to build the agent (see
+`RESEARCH-LOG.md` for why).
 
 ## Running the agent
 
@@ -29,10 +30,12 @@ This loads `model/model.pkl`, scores `data/accounts_to_score.csv`, and writes
     streamlit run agent/ui/app.py
 
 Reads the two files above (run the agent at least once first, or use the in-app "Run agent
-now" button). Filterable worklist, per-account detail with reason codes and drafted outreach,
-a live "regenerate draft" button, and a Monitoring tab.
+now" button). Three tabs: **Worklist** (filterable table, per-account detail with reason codes
+and drafted outreach, a live "regenerate draft" button), **Monitoring** (all five checks with
+pass/warn/fail status), and **Ask** (a domain-grounded Q&A chatbot — see below). The sidebar
+also has a "What do these terms mean?" glossary for anyone unfamiliar with the sales/data terms.
 
-## Optional: a real LLM call instead of the mock
+## Optional: a real LLM call instead of the mock (outreach drafting)
 
 No LLM API key is provided for this exercise (see the take-home packet), so outreach drafting
 defaults to a documented mock (`agent/llm/client.py`). To use a real call instead, set an
@@ -41,6 +44,20 @@ environment variable before running:
     export GROQ_API_KEY=...          # Windows: $env:GROQ_API_KEY = "..."
 
 Same interface either way — nothing else in the codebase changes.
+
+## The "Ask" chatbot (a separate, real Groq feature — not part of the mock/Groq swap above)
+
+`agent/chatbot.py` is a small Q&A assistant, always a real Groq call (`openai/gpt-oss-120b`,
+streaming), grounded in a condensed domain-dictionary excerpt plus whichever account(s) a
+question mentions (filtered from `agent/output/worklist.csv`, not the whole dataset). Requires
+a `.env` file in the repo root with:
+
+    GROQ_API_KEY=your-key-here
+
+Try it from the CLI: `python -m agent.chatbot "Why is ACC-00533 a Hot account?"`, or use the
+**Ask** tab in the Streamlit UI. Note: the full `DOMAIN-DICTIONARY.md` is too large for this
+Groq org's 8000 TPM rate limit in one call, so the chatbot uses a hand-curated excerpt instead
+(`CONDENSED_DICTIONARY` in `agent/chatbot.py`) — see `RESEARCH-LOG.md` for the full story.
 
 Loading the model (already trained, don't retrain it):
 
@@ -58,19 +75,26 @@ Expected feature columns, in the order the model was trained on: `account_type`,
 - `model/model.pkl`, a real, already-trained scikit-learn pipeline. Not retrained.
 - `data/training_data.csv`, `data/accounts_to_score.csv` — provided, untouched.
 - `scripts/explore_data.py` — one-off data/model exploration; findings are in `RESEARCH-LOG.md`.
+- `scripts/make_charts.py` — generates the charts embedded in `PROPOSAL.html`.
 - `agent/tools.py` — deterministic tools: `score_accounts`, `data_quality_gate`, `assign_tiers`,
-  `assign_track`, `reason_codes`. No LLM involved.
-- `agent/llm/client.py` — the one non-deterministic tool (`OutreachDrafter`): a documented
-  mock by default, a real Groq call if `GROQ_API_KEY` is set, same interface either way.
+  `assign_track`, `reason_codes` (plain-English, not raw column names). No LLM involved.
+- `agent/llm/client.py` — the one non-deterministic *pipeline* tool (`OutreachDrafter`): a
+  documented mock by default, a real Groq call if `GROQ_API_KEY` is set, same interface either way.
+- `agent/chatbot.py` — a separate, always-real Groq-backed Q&A assistant (see above).
 - `agent/graph.py`, `agent/run.py` — the LangGraph pipeline and its CLI entrypoint.
-- `agent/ui/app.py` — the Streamlit dashboard.
-- `agent/output/worklist.csv` — a committed sample run's output.
-- `monitoring/checks.py` — input-quality, score-drift (PSI), tier-sanity, and a precisely
-  specified (but not-yet-runnable) business-outcome-proxy check.
+- `agent/ui/app.py` — the Streamlit dashboard (Worklist / Monitoring / Ask tabs + glossary).
+- `agent/output/worklist.csv`, `agent/output/charts/` — a committed sample run's output/charts.
+- `monitoring/checks.py` — input-quality, score-drift (PSI), tier-sanity, business-outcome-proxy
+  (not yet runnable), and LLM-output-groundedness (via Inspect AI) checks.
+- `monitoring/llm_eval.py` — the Inspect AI eval backing the groundedness check.
 - `monitoring/latest_report.json` — output of the committed sample run.
-- `PROPOSAL.md` — impact framing, agent design, monitoring design.
+- `DOMAIN-DICTIONARY.md` — reference for every column/term used here, including this repo's
+  own implementation vocabulary (Tier, Track, `needs_review`, etc. — section 11).
+- `PROPOSAL.md` — impact framing, agent design, monitoring design (required deliverable).
+- `PROPOSAL.html` — the same substance, written for a non-technical/VP audience with charts
+  and a concrete before/after example.
 - `RESEARCH-LOG.md` — kept live throughout the build: hypotheses, data findings, AI
-  prompts/responses, and one place an AI-drafted bug was caught and fixed.
+  prompts/responses, and multiple places an AI-drafted bug was caught and fixed.
 
 ## Working process
 
