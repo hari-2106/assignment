@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-19T11:31:29.363754+00:00",
+  "generated_at": "2026-09-19T12:53:37.683003+00:00",
   "input_quality": {
     "status": "pass",
     "issues": [],
@@ -27,5 +27,12 @@
   "business_outcome_proxy": {
     "status": "not_runnable",
     "reason": "No ground-truth outcomes exist yet for this batch (conversion is a 90-day window; this batch was scored on 2026-08-01). See this function's docstring for the exact inputs and logic once outcomes are available."
+  },
+  "llm_output_groundedness": {
+    "status": "pass",
+    "n_drafts_evaluated": 20,
+    "mean_groundedness": 1.0,
+    "worst_groundedness": 1.0,
+    "flagged_accounts": []
   }
 }

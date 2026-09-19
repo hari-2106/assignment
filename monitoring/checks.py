@@ -158,6 +158,22 @@ def check_business_outcome_proxy(
     }
 
 
+def check_llm_output_groundedness(worklist_path: str = "agent/output/worklist.csv") -> dict:
+    """Runs the Inspect AI numeric-groundedness eval (monitoring/llm_eval.py) against the
+    drafted outreach text. Unlike the other checks, this one targets the LLM step
+    specifically: does every number a draft states about an account actually appear in that
+    account's real data? The mock backend always scores ~1.0 by construction (it only
+    recombines given facts) — this check earns its value once a real generative backend
+    (Groq) is active and could paraphrase, round, or invent a number.
+    """
+    try:
+        from monitoring.llm_eval import run_groundedness_eval
+
+        return run_groundedness_eval(worklist_path)
+    except Exception as exc:  # pragma: no cover - defensive: eval infra shouldn't break scoring
+        return {"status": "not_runnable", "reason": f"groundedness eval failed to run: {exc}"}
+
+
 def build_report(
     dq_metrics: dict,
     reference_scores: pd.Series,
@@ -170,4 +186,5 @@ def build_report(
         "score_drift": check_score_distribution_drift(reference_scores, new_scores),
         "tier_sanity": check_tier_distribution_sanity(tiers),
         "business_outcome_proxy": check_business_outcome_proxy(),
+        "llm_output_groundedness": check_llm_output_groundedness(),
     }
