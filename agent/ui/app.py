@@ -287,6 +287,15 @@ with tab_ask:
         "in this system's own data and definitions, not general knowledge."
     )
 
+    from agent.chatbot import is_configured
+
+    if not is_configured():
+        st.info(
+            "This feature isn't set up yet. See the README for how to enable it — it takes "
+            "about two minutes and doesn't affect anything else in this app."
+        )
+        st.stop()
+
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
 

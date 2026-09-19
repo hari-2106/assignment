@@ -97,6 +97,14 @@ def _load_env() -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
+def is_configured() -> bool:
+    """True if a GROQ_API_KEY is available (env var or .env). Callers (CLI, Streamlit) should
+    check this before calling ask() so a missing key fails as a clear message, not a crash.
+    """
+    _load_env()
+    return bool(os.environ.get("GROQ_API_KEY"))
+
+
 def _load_domain_dictionary() -> str:
     """Returns the condensed reference (see CONDENSED_DICTIONARY) rather than the full
     ~10k-token DOMAIN-DICTIONARY.md, which alone exceeds this Groq org's 8000 TPM rate limit.
@@ -165,6 +173,15 @@ def ask(question: str) -> Iterator[str]:
 
 if __name__ == "__main__":
     import sys
+
+    if not is_configured():
+        print(
+            "GROQ_API_KEY is not set. Create a .env file in the repo root with:\n"
+            "  GROQ_API_KEY=your-key-here\n"
+            "See README.md for how to get a free key from console.groq.com. The scoring "
+            "agent itself (python -m agent.run) does not need this — only this chatbot does."
+        )
+        sys.exit(1)
 
     question = " ".join(sys.argv[1:]) or "How many accounts are in the Hot tier and why?"
     print(f"Q: {question}\n")
