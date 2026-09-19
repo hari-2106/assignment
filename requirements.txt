@@ -3,5 +3,10 @@ numpy==1.26.4
 scikit-learn==1.5.2
 matplotlib==3.9.2
 
+# Added for the agent build (not part of the original starter pins):
+langgraph==1.2.11
+streamlit==1.64.0
+requests==2.34.2
+
 # Optional — only needed if you prefer a notebook over plain scripts.
 # pip install -r requirements-notebook.txt
