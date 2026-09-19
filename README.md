@@ -8,6 +8,40 @@
 
 Tested against Python 3.11+ with the exact pinned versions above. If you'd rather work in a notebook than plain scripts (either is fine, see the take-home packet), `pip install -r requirements-notebook.txt` instead (adds Jupyter on top of the same pinned core).
 
+`requirements.txt` also pins `langgraph`, `streamlit`, and `requests` — added on top of the
+starter's original pins to build the agent (see `RESEARCH-LOG.md` for why).
+
+## Running the agent
+
+Run everything from the repo root (relative paths in the code assume it).
+
+    python -m agent.run
+
+**Not** `python agent/run.py` — that breaks the `agent.*` package import (Python doesn't put
+the repo root on `sys.path` when you run a script by relative path).
+
+This loads `model/model.pkl`, scores `data/accounts_to_score.csv`, and writes
+`agent/output/worklist.csv` and `monitoring/latest_report.json`. It also prints a summary
+(tier counts, accounts needing review, drafts generated, monitoring status).
+
+## Running the dashboard
+
+    streamlit run agent/ui/app.py
+
+Reads the two files above (run the agent at least once first, or use the in-app "Run agent
+now" button). Filterable worklist, per-account detail with reason codes and drafted outreach,
+a live "regenerate draft" button, and a Monitoring tab.
+
+## Optional: a real LLM call instead of the mock
+
+No LLM API key is provided for this exercise (see the take-home packet), so outreach drafting
+defaults to a documented mock (`agent/llm/client.py`). To use a real call instead, set an
+environment variable before running:
+
+    export GROQ_API_KEY=...          # Windows: $env:GROQ_API_KEY = "..."
+
+Same interface either way — nothing else in the codebase changes.
+
 Loading the model (already trained, don't retrain it):
 
     import pickle
@@ -21,13 +55,22 @@ Expected feature columns, in the order the model was trained on: `account_type`,
 
 ## What's here
 
-- `model/model.pkl`, a real, already-trained scikit-learn pipeline. Don't retrain it. You don't need to audit it to research rigor, this exercise isn't scored on that, but it's real data worth actually looking at if it changes your impact framing or monitoring design.
-- `data/training_data.csv`, the labeled historical data the model above was actually trained on. Look at it enough to ground your impact-framing numbers and your monitoring design, that's the bar, not a full audit.
-- `data/accounts_to_score.csv`, an unlabeled batch you'll run the model against as part of the agent build. Don't modify or regenerate either CSV; everyone works from the same files.
-- `agent/`, your agent: load the model, score `accounts_to_score.csv`, and build something real that does something with the output. Vague on purpose, see the take-home packet's hints on what we'd minimally want to see (tools/actions, structure, framework choice and why, deployment). Mock any LLM/API calls, no key is provided, see the packet.
-- `monitoring/`, at least one real, concrete monitoring check (a health check, a data-quality assertion, a drift signal, an alert condition). Can live here or be folded into `agent/`, your call. See the packet, this is scored as its own dimension, not a bullet point.
-- `PROPOSAL.md`, your written design proposal covering all three: impact framing, agent design, monitoring design (see the take-home packet for the required sections).
-- `RESEARCH-LOG.md`, your running log as you work: hypotheses, what you tried, dead ends, and specifically what you asked your AI tool and how you used what came back.
+- `model/model.pkl`, a real, already-trained scikit-learn pipeline. Not retrained.
+- `data/training_data.csv`, `data/accounts_to_score.csv` — provided, untouched.
+- `scripts/explore_data.py` — one-off data/model exploration; findings are in `RESEARCH-LOG.md`.
+- `agent/tools.py` — deterministic tools: `score_accounts`, `data_quality_gate`, `assign_tiers`,
+  `assign_track`, `reason_codes`. No LLM involved.
+- `agent/llm/client.py` — the one non-deterministic tool (`OutreachDrafter`): a documented
+  mock by default, a real Groq call if `GROQ_API_KEY` is set, same interface either way.
+- `agent/graph.py`, `agent/run.py` — the LangGraph pipeline and its CLI entrypoint.
+- `agent/ui/app.py` — the Streamlit dashboard.
+- `agent/output/worklist.csv` — a committed sample run's output.
+- `monitoring/checks.py` — input-quality, score-drift (PSI), tier-sanity, and a precisely
+  specified (but not-yet-runnable) business-outcome-proxy check.
+- `monitoring/latest_report.json` — output of the committed sample run.
+- `PROPOSAL.md` — impact framing, agent design, monitoring design.
+- `RESEARCH-LOG.md` — kept live throughout the build: hypotheses, data findings, AI
+  prompts/responses, and one place an AI-drafted bug was caught and fixed.
 
 ## Working process
 
