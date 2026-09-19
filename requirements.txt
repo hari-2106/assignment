@@ -7,6 +7,9 @@ matplotlib==3.9.2
 langgraph==1.2.11
 streamlit==1.64.0
 requests==2.34.2
+groq==1.7.0
+python-dotenv==1.2.3
+inspect_ai==0.3.265
 
 # Optional — only needed if you prefer a notebook over plain scripts.
 # pip install -r requirements-notebook.txt

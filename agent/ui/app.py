@@ -25,6 +25,21 @@ st.set_page_config(page_title="Cordilla Account Worklist", layout="wide")
 
 STATUS_LABEL = {"pass": "OK", "warn": "WARN", "fail": "FAIL", "not_runnable": "N/A"}
 
+# Short persona/term glossary shown in the sidebar — full detail lives in
+# DOMAIN-DICTIONARY.md, this is just enough to read the table without guessing.
+GLOSSARY = {
+    "Prospect": "A potential customer who's shown some interest or fits our target profile, but hasn't bought yet.",
+    "Suspect": "A company that *might* be a fit, but hasn't been qualified at all yet — least information of the three.",
+    "Former Customer": "Used to pay us, doesn't anymore. A win-back target, not a cold lead.",
+    "SDR (Sales Development Rep)": "The person who does first-touch cold outreach into Prospects/Suspects.",
+    "Account Manager (AM)": "Owns the relationship with existing/former customers — handles win-back here.",
+    "Tier (Hot/Warm/Cold)": "How this account ranks against the others in today's batch (top 10% = Hot). Not an absolute score.",
+    "Track": "Which persona should work this account — SDR_Outbound or AM_WinBack — based on account type.",
+    "needs_review": "The agent isn't fully confident in this row's data (e.g. very old snapshot) — a person should sanity-check it before acting.",
+    "Reason codes": "Plain-English signals explaining why the model rated this account the way it did — not a guarantee, just the model's biggest inputs.",
+    "Draft outreach": "A starting point for a first message — always read and personalize before sending.",
+}
+
 
 @st.cache_data(show_spinner=False)
 def load_worklist(_mtime: float) -> pd.DataFrame:
@@ -66,7 +81,12 @@ report_mtime = MONITORING_REPORT_PATH.stat().st_mtime if MONITORING_REPORT_PATH.
 df = load_worklist(worklist_mtime)
 report = load_report(report_mtime) if MONITORING_REPORT_PATH.exists() else {}
 
-tab_worklist, tab_monitoring = st.tabs(["Worklist", "Monitoring"])
+with st.sidebar.expander("What do these terms mean?"):
+    for term, definition in GLOSSARY.items():
+        st.markdown(f"**{term}** — {definition}")
+    st.caption("Full reference: DOMAIN-DICTIONARY.md")
+
+tab_worklist, tab_monitoring, tab_ask = st.tabs(["Worklist", "Monitoring", "Ask"])
 
 with tab_worklist:
     st.sidebar.header("Filters")
@@ -159,3 +179,33 @@ with tab_monitoring:
                 st.info(label)
             with st.expander("Details"):
                 st.json(result)
+
+with tab_ask:
+    st.subheader("Ask about an account or a term")
+    st.caption(
+        "Answers are grounded in DOMAIN-DICTIONARY.md and the worklist data — mention an "
+        "account ID (e.g. ACC-00533) to ask about a specific account. Requires GROQ_API_KEY "
+        "in a local .env file."
+    )
+
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    for role, content in st.session_state.chat_history:
+        with st.chat_message(role):
+            st.markdown(content)
+
+    question = st.chat_input("e.g. Why is ACC-00533 a Hot account?")
+    if question:
+        st.session_state.chat_history.append(("user", question))
+        with st.chat_message("user"):
+            st.markdown(question)
+        with st.chat_message("assistant"):
+            try:
+                from agent.chatbot import ask
+
+                answer = st.write_stream(ask(question))
+            except Exception as exc:  # noqa: BLE001 - surface any failure directly in the UI
+                answer = f"Couldn't reach the assistant: {exc}"
+                st.error(answer)
+        st.session_state.chat_history.append(("assistant", answer))
