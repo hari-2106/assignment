@@ -25,6 +25,31 @@ st.set_page_config(page_title="Cordilla Account Worklist", layout="wide")
 
 STATUS_LABEL = {"pass": "OK", "warn": "WARN", "fail": "FAIL", "not_runnable": "N/A"}
 
+# Plain-English name + one-line explanation for each monitoring check — the raw dict keys
+# (e.g. "llm_output_groundedness") are for engineers, not for the rep/ops person reading this
+# tab. Also sidesteps str.title()'s "Llm" bug on acronyms.
+CHECK_DISPLAY = {
+    "input_quality": ("Input data quality", "Are the incoming accounts complete enough to trust?"),
+    "score_drift": ("Score drift", "Have the model's scores shifted unexpectedly since training?"),
+    "tier_sanity": ("Tier balance", "Is the Hot-tier share of this batch in the normal range?"),
+    "business_outcome_proxy": ("Real-world accuracy check", "Do flagged accounts actually convert as predicted? (needs 90-day-old outcomes)"),
+    "llm_output_groundedness": ("Draft accuracy (LLM)", "Does every number in a drafted message match this account's real data?"),
+}
+
+# Friendly display names/formats for the worklist table — avoids leaking raw pandas column
+# names (e.g. "employee_count") into the UI.
+TABLE_COLUMN_CONFIG = {
+    "account_id": st.column_config.TextColumn("Account ID"),
+    "account_type": st.column_config.TextColumn("Account type"),
+    "track": st.column_config.TextColumn("Track"),
+    "tier": st.column_config.TextColumn("Tier"),
+    "probability": st.column_config.NumberColumn("P(convert)", format="%.1f%%"),
+    "industry": st.column_config.TextColumn("Industry"),
+    "employee_count": st.column_config.NumberColumn("Employees", format="%d"),
+    "needs_review": st.column_config.CheckboxColumn("Needs review?", disabled=True),
+    "reason_codes": st.column_config.TextColumn("Why", width="large"),
+}
+
 # Short persona/term glossary shown in the sidebar — full detail lives in
 # DOMAIN-DICTIONARY.md, this is just enough to read the table without guessing.
 GLOSSARY = {
@@ -70,6 +95,10 @@ st.caption(
 
 if st.button("Run agent now", type="primary"):
     run_agent()
+st.caption(
+    "Re-scores all 300 accounts from scratch using the current model and data — takes a few "
+    "seconds, safe to click any time, does not send any outreach."
+)
 
 if not WORKLIST_PATH.exists():
     st.warning("No worklist yet — click 'Run agent now' or run `python -m agent.run` first.")
@@ -108,22 +137,32 @@ with tab_worklist:
         filtered = filtered[filtered["needs_review"]]
 
     st.write(f"{len(filtered)} of {len(df)} accounts")
+    table_view = filtered[
+        [
+            "account_id",
+            "account_type",
+            "track",
+            "tier",
+            "probability",
+            "industry",
+            "employee_count",
+            "needs_review",
+            "reason_codes",
+        ]
+    ].copy()
+    # Pre-scale to percentage points ourselves rather than relying on column_config's
+    # built-in "percent" format, so the displayed precision is exactly what we intend.
+    table_view["probability"] = table_view["probability"] * 100
     st.dataframe(
-        filtered[
-            [
-                "account_id",
-                "account_type",
-                "track",
-                "tier",
-                "probability",
-                "industry",
-                "employee_count",
-                "needs_review",
-                "reason_codes",
-            ]
-        ],
+        table_view,
+        column_config=TABLE_COLUMN_CONFIG,
         width="stretch",
         hide_index=True,
+    )
+    st.caption(
+        "No company name is available in the source data (only an account ID) — see "
+        "DOMAIN-DICTIONARY.md. Industry + employee count below are the closest identifying "
+        "context we have."
     )
 
     st.subheader("Account detail")
@@ -149,26 +188,84 @@ with tab_worklist:
             draft = row["draft_outreach"] if isinstance(row["draft_outreach"], str) else ""
             if draft:
                 st.info(draft)
+            elif row["needs_review"]:
+                st.caption(
+                    "No draft was generated because this account is flagged **needs review** "
+                    "- the agent won't auto-draft off data it doesn't trust yet. Verify the "
+                    "flagged issue above, then generate one manually below if it checks out."
+                )
             else:
-                st.caption("No draft generated automatically (Hot tier only, top 20 by probability).")
-            if st.button(f"Regenerate draft for {selected}"):
+                st.caption(
+                    "No draft was generated automatically — only the top 20 Hot-tier accounts "
+                    "by probability get one. You can still generate one manually below."
+                )
+            button_label = f"{'Regenerate' if draft else 'Generate'} draft for {selected}"
+            if st.button(button_label):
                 drafter = get_drafter()
                 reason_list = str(row["reason_codes"]).split("; ")
                 new_draft = drafter.draft(row.to_dict(), reason_list)
                 st.info(new_draft)
                 st.caption(f"Backend: {type(drafter).__name__}")
 
+def _render_check_detail(name: str, result: dict) -> None:
+    """A plain-English summary of each check's result, before the raw JSON fallback."""
+    if name == "input_quality":
+        issues = result.get("issues", [])
+        if issues:
+            for issue in issues:
+                st.markdown(f"- {issue}")
+        else:
+            st.markdown("No data quality issues detected in this batch.")
+    elif name == "score_drift":
+        psi = result.get("psi")
+        st.markdown(
+            f"Population Stability Index: **{psi:.3f}** comparing {result.get('new_n')} new "
+            f"accounts against {result.get('reference_n')} historical ones. "
+            f"(<0.10 = stable, 0.10-0.20 = moderate shift, >0.20 = significant shift)"
+        )
+    elif name == "tier_sanity":
+        st.markdown(
+            f"**{result.get('hot_share', 0):.1%}** of this batch is Hot tier "
+            f"(expected around **{result.get('expected_hot_share', 0):.0%}**)."
+        )
+    elif name == "business_outcome_proxy":
+        st.markdown(result.get("reason", "Not runnable yet."))
+    elif name == "llm_output_groundedness":
+        n = result.get("n_drafts_evaluated")
+        if n:
+            st.markdown(
+                f"Checked **{n}** drafted messages. Average accuracy: "
+                f"**{result.get('mean_groundedness', 0):.0%}**, lowest: "
+                f"**{result.get('worst_groundedness', 0):.0%}**."
+            )
+            for flag in result.get("flagged_accounts", []):
+                st.markdown(f"- ⚠ {flag.get('account_id')}: {flag.get('explanation')}")
+        else:
+            st.markdown(result.get("reason", "No drafts to evaluate yet."))
+    with st.expander("Raw data (for engineers)"):
+        st.json(result)
+
+
 with tab_monitoring:
     st.subheader("Monitoring report")
     if not report:
         st.info("No monitoring report yet — run the agent first.")
     else:
-        st.caption(f"Generated at {report.get('generated_at', 'unknown')}")
-        for name, result in report.items():
-            if name == "generated_at" or not isinstance(result, dict):
-                continue
+        checks = {k: v for k, v in report.items() if k != "generated_at" and isinstance(v, dict)}
+        n_fail = sum(1 for r in checks.values() if r.get("status") == "fail")
+        n_warn = sum(1 for r in checks.values() if r.get("status") == "warn")
+        if n_fail:
+            st.error(f"{n_fail} check(s) failing — see below before trusting this batch.")
+        elif n_warn:
+            st.warning(f"{n_warn} check(s) need attention.")
+        else:
+            st.success("All checks passing — this batch looks trustworthy.")
+        st.caption(f"Last run: {report.get('generated_at', 'unknown')} (UTC)")
+
+        for name, result in checks.items():
+            display_name, description = CHECK_DISPLAY.get(name, (name.replace("_", " ").title(), ""))
             status = result.get("status", "unknown")
-            label = f"{name.replace('_', ' ').title()}: {STATUS_LABEL.get(status, status)}"
+            label = f"{display_name}: {STATUS_LABEL.get(status, status)}"
             if status == "pass":
                 st.success(label)
             elif status == "warn":
@@ -177,19 +274,25 @@ with tab_monitoring:
                 st.error(label)
             else:
                 st.info(label)
+            if description:
+                st.caption(description)
             with st.expander("Details"):
-                st.json(result)
+                _render_check_detail(name, result)
 
 with tab_ask:
     st.subheader("Ask about an account or a term")
     st.caption(
-        "Answers are grounded in DOMAIN-DICTIONARY.md and the worklist data — mention an "
-        "account ID (e.g. ACC-00533) to ask about a specific account. Requires GROQ_API_KEY "
-        "in a local .env file."
+        "Ask about a specific account (e.g. \"Why is ACC-00533 a Hot account?\") or about any "
+        "term used in this tool (e.g. \"What does needs_review mean?\"). Answers are grounded "
+        "in this system's own data and definitions, not general knowledge."
     )
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+
+    if st.session_state.chat_history and st.button("Clear conversation"):
+        st.session_state.chat_history = []
+        st.rerun()
 
     for role, content in st.session_state.chat_history:
         with st.chat_message(role):
@@ -205,7 +308,8 @@ with tab_ask:
                 from agent.chatbot import ask
 
                 answer = st.write_stream(ask(question))
-            except Exception as exc:  # noqa: BLE001 - surface any failure directly in the UI
-                answer = f"Couldn't reach the assistant: {exc}"
+            except Exception as exc:  # noqa: BLE001 - keep internals out of a demo-facing UI
+                answer = "This assistant isn't available right now."
                 st.error(answer)
+                st.caption(f"(Details for whoever's running this: {exc})")
         st.session_state.chat_history.append(("assistant", answer))
