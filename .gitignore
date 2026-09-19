@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 .env
 monitoring/inspect_logs/
+.DS_Store

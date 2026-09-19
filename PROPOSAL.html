@@ -6,6 +6,7 @@
 <title>Cordilla Account Scoring — Proposal</title>
 <style>
   :root {
+    color-scheme: light;
     --ink: #1d1d1f;
     --muted: #5f6368;
     --bg: #ffffff;
@@ -15,7 +16,19 @@
     --hot: #d62828;
     --warm: #f77f00;
     --cold: #8d99ae;
-    --good: #2a9d8f;
+    --good: #18756a;
+    --code-bg: #eeeeef;
+    --code-ink: #303037;
+    --callout-bg: #fff8e6;
+    --callout-line: #f0d98c;
+    --warn-bg: #fdecea;
+    --warn-line: #f3b4ac;
+    --good-bg: #e9f7f4;
+    --good-line: #b7e4da;
+    --badge-hot-bg: #d62828;
+    --badge-hot-ink: #ffffff;
+    --badge-warn-bg: #f3b4ac;
+    --badge-warn-ink: #5c1a12;
   }
   * { box-sizing: border-box; }
   body {
@@ -37,18 +50,18 @@
   .stat-card { flex: 1 1 180px; background: var(--card); border-radius: 10px; padding: 16px 18px; border: 1px solid var(--line); }
   .stat-card .num { font-size: 1.8rem; font-weight: 700; color: var(--accent); }
   .stat-card .label { font-size: 0.85rem; color: var(--muted); }
-  .chart { width: 100%; max-width: 700px; display: block; margin: 18px auto; border-radius: 8px; border: 1px solid var(--line); }
-  .callout { background: #fff8e6; border: 1px solid #f0d98c; border-radius: 8px; padding: 14px 16px; margin: 16px 0; }
-  .callout.warn { background: #fdecea; border-color: #f3b4ac; }
-  .callout.good { background: #e9f7f4; border-color: #b7e4da; }
+  .chart { width: 100%; max-width: 700px; display: block; margin: 18px auto; border-radius: 8px; border: 1px solid var(--line); background: #ffffff; color: #1d1d1f; }
+  .callout { color: var(--ink); background: var(--callout-bg); border: 1px solid var(--callout-line); border-radius: 8px; padding: 14px 16px; margin: 16px 0; }
+  .callout.warn { background: var(--warn-bg); border-color: var(--warn-line); }
+  .callout.good { background: var(--good-bg); border-color: var(--good-line); }
   .two-col { display: flex; gap: 20px; flex-wrap: wrap; margin: 16px 0; }
   .card { flex: 1 1 320px; border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; background: var(--card); }
   .card h4 { margin: 0 0 8px; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
   .card.before { border-left: 4px solid var(--cold); }
   .card.after { border-left: 4px solid var(--good); }
   .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; }
-  .badge.hot { background: var(--hot); color: white; }
-  .badge.warn { background: #f3b4ac; color: #5c1a12; }
+  .badge.hot { background: var(--badge-hot-bg); color: var(--badge-hot-ink); }
+  .badge.warn { background: var(--badge-warn-bg); color: var(--badge-warn-ink); }
   .pipeline { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 16px 0; font-size: 0.85rem; }
   .step { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; }
   .step.gate { border-color: var(--hot); }
@@ -61,13 +74,19 @@
   .idea { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
   .idea .tag { font-size: 0.7rem; text-transform: uppercase; color: var(--good); font-weight: 700; letter-spacing: 0.05em; }
   footer { margin-top: 50px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.85rem; }
-  code { background: #eee; padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
+  code { color: var(--code-ink); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.9em; }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
+      color-scheme: dark;
       --ink: #f2f2f3; --muted: #a3a3a8; --bg: #121214; --card: #1c1c1f; --line: #313136;
+      --accent: #9bd3e5; --hot: #ff8585; --warm: #ffb86b; --cold: #aab7cd; --good: #70d8bf;
+      --code-bg: #303038; --code-ink: #f2f2f3;
+      --callout-bg: #302919; --callout-line: #806a35;
+      --warn-bg: #351f22; --warn-line: #8b4b50;
+      --good-bg: #19312b; --good-line: #397c6b;
+      --badge-hot-bg: #ff8585; --badge-hot-ink: #351315;
+      --badge-warn-bg: #583330; --badge-warn-ink: #ffd4cd;
     }
-    body { background: var(--bg); }
-    .chart { filter: brightness(0.95); background: white; }
   }
 </style>
 </head>
