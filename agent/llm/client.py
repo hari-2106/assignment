@@ -54,22 +54,23 @@ class MockOutreachDrafter(OutreachDrafter):
     """
 
     def draft(self, account: dict, reason_codes: list[str]) -> str:
-        top_signal = reason_codes[0] if reason_codes else "recent activity"
         industry = account.get("industry", "their industry")
         account_type = account.get("account_type", "account")
+        top = reason_codes[0] if reason_codes else "has notable recent activity worth a look"
+        second = reason_codes[1] if len(reason_codes) > 1 else None
+
         if account_type == "Former Customer":
             opener = (
-                f"Worth a win-back touch - {top_signal} suggests renewed interest since they "
-                f"left."
+                f"This account is a former customer and {top}, which makes it worth a "
+                f"win-back call."
             )
         else:
-            opener = f"Strong outbound candidate - {top_signal}."
-        extra = ""
-        if len(reason_codes) > 1:
-            extra = f" Also notable: {reason_codes[1]}."
+            opener = f"This account {top}, making it a strong outbound candidate right now."
+
+        extra = f" Additionally, this account {second}." if second else ""
         return (
-            f"{opener}{extra} Given they're in {industry}, lead with a relevant use case "
-            f"rather than a generic intro."
+            f"{opener}{extra} Since they're in {industry}, open with a relevant use case for "
+            f"that industry rather than a generic intro."
         )
 
 

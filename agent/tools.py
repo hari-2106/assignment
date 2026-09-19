@@ -84,9 +84,13 @@ def check_schema(df: pd.DataFrame) -> list[str]:
 def data_quality_gate(df: pd.DataFrame) -> DataQualityResult:
     """Per-row + dataset-level quality gate.
 
-    Rows with real blockers (missing required fields, unparseable/very stale snapshot_date)
-    are flagged needs_review and excluded from auto-drafted outreach, but are still scored and
-    shown — missing data quality means "have a human look," not "hide the account."
+    `needs_review` means: the agent doesn't trust this row enough to act on it with full
+    confidence, so a human should sanity-check it before anyone calls based on it alone. It
+    is set when the snapshot is unparseable, over a year old (STALE_SNAPSHOT_DAYS), or missing
+    a field the model needs beyond what its own imputation covers. It is NOT set just because
+    `intent_score` is missing — that's a known ~40% vendor coverage gap the model already
+    imputes around, not a reason to hold the account back. Flagged rows are still scored and
+    shown, never hidden — this is "double-check before acting," not "ignore this account."
 
     At the dataset level, if quality has collapsed wholesale (see dataset_ok), the caller
     should abort the run rather than silently produce a confident-looking worklist from
@@ -117,7 +121,9 @@ def data_quality_gate(df: pd.DataFrame) -> DataQualityResult:
         reasons.append(row_reasons)
 
     row_reasons = pd.Series(reasons, index=df.index)
-    row_needs_review = bad_date | missing_hard
+    # intent_score missing is NOT included here — the model imputes it and ~40% missingness
+    # is an expected, known coverage gap, not a reason to withhold an account from a rep.
+    row_needs_review = bad_date | missing_hard | stale
 
     intent_null_rate = float(missing_intent.mean())
     dataset_metrics = {
@@ -168,10 +174,76 @@ def assign_track(account_type: pd.Series) -> pd.Series:
     return account_type.map(lambda t: "AM_WinBack" if t == "Former Customer" else "SDR_Outbound")
 
 
+def _phrase_intent_score(val: float, med: float, above: bool) -> str:
+    level = "strong" if above else "below-average"
+    return f"shows {level} buying intent (score {val:.0f} vs. a typical {med:.0f})"
+
+
+def _phrase_web_touchpoints(val: float, med: float, above: bool) -> str:
+    if val == 0:
+        return "has not visited the website recently"
+    word = "more" if above else "less"
+    return (
+        f"has been {word} active on the website than usual "
+        f"({val:g} visits in the last 90 days vs. a typical {med:g})"
+    )
+
+
+def _phrase_sales_contacts(val: float, med: float, above: bool) -> str:
+    if val == 0:
+        return "has had no sales contact yet in the last 90 days"
+    word = "more" if above else "less"
+    return (
+        f"has had {word} contact with sales than typical "
+        f"({val:g} touches in 90 days vs. a typical {med:g})"
+    )
+
+
+def _phrase_employee_count(val: float, med: float, above: bool) -> str:
+    word = "larger" if above else "smaller"
+    return f"is a {word} company by headcount ({val:g} employees vs. a typical {med:g})"
+
+
+def _phrase_trial_started(val: float, med: float, above: bool) -> str:
+    return "has started a free trial" if val >= 1 else "has not started a trial yet"
+
+
+def _phrase_trial_active_users(val: float, med: float, above: bool) -> str:
+    if val == 0:
+        return "has no active trial users"
+    word = "more" if above else "fewer"
+    return f"has {word} active trial users than typical ({val:g} vs. a typical {med:g})"
+
+
+def _phrase_mql_count(val: float, med: float, above: bool) -> str:
+    if val == 0:
+        return "has generated no marketing-qualified leads in the last 90 days"
+    word = "more" if above else "fewer"
+    return (
+        f"generated {word} marketing-qualified leads than typical "
+        f"({val:g} in 90 days vs. a typical {med:g})"
+    )
+
+
+# Plain-language phrasing for each feature — keeps reason codes readable by a sales rep
+# instead of exposing raw column names and statistics jargon.
+FEATURE_PHRASES = {
+    "intent_score": _phrase_intent_score,
+    "web_touchpoints_90d": _phrase_web_touchpoints,
+    "sales_contacts_90d": _phrase_sales_contacts,
+    "employee_count": _phrase_employee_count,
+    "trial_started": _phrase_trial_started,
+    "trial_active_users": _phrase_trial_active_users,
+    "mql_count_90d": _phrase_mql_count,
+}
+
+
 def reason_codes(df: pd.DataFrame, top_n: int = 3) -> pd.Series:
     """Deterministic explainability: for each account, rank its top numeric signals by
-    (feature importance x distance from the population median) and render short
-    human-readable bullets, e.g. 'web touchpoints 90d: 9 (above median 2)'.
+    (feature importance x distance from the population median) and render each as a plain
+    English sentence a rep can read without needing to know column names or medians, e.g.
+    "has been more active on the website than usual (9 visits in the last 90 days vs. a
+    typical 2)" instead of "web_touchpoints_90d: 9 (above median 2)".
 
     No LLM involved — this must stay available and reliable even if the LLM draft step is
     down or disabled.
@@ -188,10 +260,8 @@ def reason_codes(df: pd.DataFrame, top_n: int = 3) -> pd.Series:
             relative = (val - med) / (abs(med) + 1e-6)
             scored.append((abs(relative) * importance, feat, val, med, relative))
         scored.sort(key=lambda x: -x[0])
-        bullets = []
+        sentences = []
         for _, feat, val, med, relative in scored[:top_n]:
-            direction = "above" if relative > 0 else "below"
-            label = feat.replace("_", " ")
-            bullets.append(f"{label}: {val:g} ({direction} median {med:g})")
-        results.append(bullets)
+            sentences.append(FEATURE_PHRASES[feat](val, med, relative > 0))
+        results.append(sentences)
     return pd.Series(results, index=df.index)
